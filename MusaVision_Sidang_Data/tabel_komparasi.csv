@@ -1,0 +1,5 @@
+Skenario Arsitektur,Precision (%),Recall (%),mAP@50 (%),mAP@50-95 (%)
+1_YOLOv8n_Raw,82.62,78.73,83.27,62.67
+2_YOLO11n_Raw,81.41,79.31,83.1,62.96
+3_YOLO26n_Raw,83.73,80.55,84.72,64.06
+4_YOLO26n_LAB_CLAHE,84.09,78.92,84.2,63.91

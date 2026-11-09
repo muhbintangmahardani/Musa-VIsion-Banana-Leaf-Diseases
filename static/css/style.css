@@ -1,0 +1,475 @@
+/* ==========================================================================
+   MusaVision — Custom Stylesheet (Clean & Modular)
+   ========================================================================== */
+
+.bg-subtle-dots {
+    background-image: radial-gradient(#CBD5E1 1px, transparent 1px);
+    background-size: 24px 24px;
+}
+
+.dark .bg-subtle-dots {
+    background-image: radial-gradient(#27272A 1px, transparent 1px);
+}
+
+/* Navbar Active Highlight Class */
+.nav-link.nav-active,
+.page-nav-link.nav-active {
+    background-color: #18181B !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+}
+
+.dark .nav-link.nav-active,
+.dark .page-nav-link.nav-active {
+    background-color: #059669 !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+}
+
+/* Sample Pill Active Highlight Class */
+.sample-pill.sample-active {
+    border-color: #059669 !important;
+    background-color: #ECFDF5 !important;
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.25) !important;
+}
+
+.dark .sample-pill.sample-active {
+    border-color: #10B981 !important;
+    background-color: rgba(5, 150, 105, 0.2) !important;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35) !important;
+}
+
+/* Refined Slider Override */
+input[type=range].banana-slider {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    width: 100%;
+    height: 6px !important;
+    background: #E4E4E7 !important;
+    border-radius: 9999px !important;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+input[type=range].banana-slider::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px !important;
+    cursor: pointer;
+    background: #E4E4E7 !important;
+    border-radius: 9999px !important;
+}
+
+input[type=range].banana-slider::-webkit-slider-thumb {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    height: 18px !important;
+    width: 18px !important;
+    border-radius: 50% !important;
+    background: #059669 !important;
+    border: 2.5px solid #FFFFFF !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25) !important;
+    cursor: pointer;
+    margin-top: -6px !important;
+    transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+input[type=range].banana-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.12);
+    background: #047857 !important;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #F8FAFC;
+}
+::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
+}
+
+.dark ::-webkit-scrollbar-track {
+    background: #09090B;
+}
+.dark ::-webkit-scrollbar-thumb {
+    background: #27272A;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: #3F3F46;
+}
+
+/* Smooth Indeterminate Progress Bar for AI Scanning */
+@keyframes progressSlide {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(20%); }
+    100% { transform: translateX(120%); }
+}
+.animate-progress-bar {
+    animation: progressSlide 1.4s ease-in-out infinite;
+}
+
+/* Hero Specimen Card Optical Scan Animation */
+@keyframes gentleScan {
+    0% { top: -10%; opacity: 0; }
+    15% { opacity: 1; }
+    85% { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+}
+@keyframes bboxPulse {
+    0%, 100% {
+        border-color: rgba(52, 211, 153, 0.85);
+        background-color: rgba(16, 185, 129, 0.08);
+    }
+    50% {
+        border-color: rgba(16, 185, 129, 1);
+        background-color: rgba(16, 185, 129, 0.16);
+    }
+}
+.animate-gentle-scan {
+    animation: gentleScan 3.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.animate-bbox-focus {
+    animation: bboxPulse 3.8s ease-in-out infinite;
+}
+
+/* ================= ENHANCED RECOMMENDATION & DETECTION CARD UI ================= */
+
+#detection-list {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+@media (min-width: 768px) {
+    #detection-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+#detection-list > div {
+    background-color: #F8FAFC !important;
+    border: 1px solid #E4E4E7 !important;
+    border-radius: 0.875rem !important;
+    padding: 0.875rem 1.125rem !important;
+    transition: all 0.15s ease;
+}
+#detection-list > div:hover {
+    background-color: #FFFFFF !important;
+    border-color: #10B981 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.dark #detection-list > div {
+    background-color: #27272A !important;
+    border-color: #3F3F46 !important;
+    color: #F4F4F5 !important;
+}
+.dark #detection-list > div:hover {
+    background-color: #3F3F46 !important;
+    border-color: #10B981 !important;
+}
+
+#recommendation-card > p {
+    background-color: #F8FAFC;
+    border: 1px solid #E4E4E7;
+    border-left: 3.5px solid #18181B;
+    padding: 0.875rem 1.125rem;
+    border-radius: 0.75rem;
+    color: #3F3F46 !important;
+    font-size: 0.84rem !important;
+    line-height: 1.6 !important;
+    margin-top: 0.75rem !important;
+}
+
+.dark #recommendation-card > p {
+    background-color: #27272A;
+    border-color: #3F3F46;
+    border-left-color: #10B981;
+    color: #E4E4E7 !important;
+}
+
+#recommendation-card .grid {
+    gap: 1.25rem !important;
+    margin-top: 1.25rem !important;
+    padding-top: 0.5rem !important;
+}
+
+#recommendation-card .grid > div {
+    background-color: #F8FAFC;
+    border: 1px solid #E4E4E7;
+    border-radius: 1rem;
+    padding: 1.25rem 1.35rem;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.dark #recommendation-card .grid > div {
+    background-color: #27272A;
+    border-color: #3F3F46;
+}
+
+#recommendation-card .grid > div:nth-child(1) {
+    border-top: 3px solid #52525B;
+}
+#recommendation-card .grid > div:nth-child(2) {
+    border-top: 3px solid #D97706;
+}
+#recommendation-card .grid > div:nth-child(3) {
+    border-top: 3px solid #059669;
+}
+
+#recommendation-card .grid > div > h5 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.05em !important;
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.75rem !important;
+    border-bottom: 1px solid #E4E4E7;
+    color: #18181B !important;
+}
+
+.dark #recommendation-card .grid > div > h5 {
+    color: #F4F4F5 !important;
+    border-bottom-color: #3F3F46;
+}
+
+#recommendation-card ul {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem !important;
+}
+
+#recommendation-card ul li {
+    background-color: #FFFFFF;
+    border: 1px solid #E4E4E7;
+    border-radius: 0.65rem;
+    padding: 0.7rem 0.85rem !important;
+    font-size: 0.8125rem !important;
+    line-height: 1.55 !important;
+    color: #3F3F46 !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.015);
+    transition: border-color 0.15s ease;
+}
+
+.dark #recommendation-card ul li {
+    background-color: #18181B;
+    border-color: #3F3F46;
+    color: #E4E4E7 !important;
+}
+
+#recommendation-card ul li:hover {
+    border-color: #CBD5E1;
+}
+
+.dark #recommendation-card ul li:hover {
+    border-color: #10B981;
+}
+
+/* ================= RESPONSIVE OPTIMIZATIONS (MOBILE & IPAD) ================= */
+
+/* Smooth momentum touch scrolling for tables and galleries */
+.overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent text clipping and enforce clean word wraps */
+.break-words {
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+/* iPad & Tablet Portrait (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+    #desktop-nav a {
+        font-size: 0.75rem !important;
+        padding-left: 0.625rem !important;
+        padding-right: 0.625rem !important;
+    }
+    #results-container table {
+        font-size: 0.8125rem;
+    }
+    #recommendation-card .grid {
+        gap: 1rem !important;
+    }
+}
+
+/* Mobile Screens (< 640px) */
+@media (max-width: 639px) {
+    #results-container table th,
+    #results-container table td {
+        padding-left: 0.65rem !important;
+        padding-right: 0.65rem !important;
+        white-space: nowrap;
+    }
+    #results-container table td:last-child {
+        white-space: normal;
+    }
+    #diagnostic-health-banner {
+        padding: 1rem !important;
+    }
+    #btn-predict {
+        padding-top: 0.85rem !important;
+        padding-bottom: 0.85rem !important;
+    }
+}
+
+/* ================= MULTI-PAGE VIEW & MOBILE NAVIGATION ENHANCEMENTS ================= */
+.page-view {
+    min-height: calc(100vh - 4rem);
+    transition: opacity 0.25s ease;
+}
+
+@keyframes pageFadeIn {
+    0% {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in {
+    animation: pageFadeIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: opacity, transform;
+}
+
+/* Desktop Multi-Page Nav Links */
+.page-nav-link {
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+.page-nav-link.nav-active {
+    background-color: #18181B !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+}
+.dark .page-nav-link.nav-active {
+    background-color: #059669 !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+}
+.page-nav-link:not(.nav-active):hover {
+    background-color: rgba(244, 244, 245, 0.9);
+    color: #09090B;
+}
+.dark .page-nav-link:not(.nav-active):hover {
+    background-color: #27272A !important;
+    color: #F4F4F5 !important;
+}
+
+/* Mobile Bottom Navigation Bar */
+#mobile-bottom-nav {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding-bottom: calc(0.6rem + env(safe-area-inset-bottom, 0px));
+}
+
+.mob-nav-btn {
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+
+.mob-nav-btn.active-tab {
+    color: #047857 !important;
+}
+
+.dark .mob-nav-btn.active-tab {
+    color: #34D399 !important;
+}
+
+#mobile-bottom-nav {
+    padding-bottom: calc(0.625rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* ================= DARK MODE PREDICT BUTTON VIBRANT CONTRAST ================= */
+.dark #btn-predict {
+    color: #FFFFFF !important;
+}
+.dark #btn-predict:not(:disabled) {
+    background-color: #059669 !important;
+    border: 1px solid #10B981 !important;
+    box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35) !important;
+}
+.dark #btn-predict:not(:disabled):hover {
+    background-color: #10B981 !important;
+    color: #FFFFFF !important;
+}
+.dark #btn-predict:disabled {
+    opacity: 1 !important;
+    background-color: #27272A !important;
+    color: #71717A !important;
+    border: 1px solid #3F3F46 !important;
+}
+
+/* Camera Viewfinder & Centered Shutter Button */
+#camera-modal {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+#btn-camera-shutter {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+#btn-camera-shutter:active {
+    transform: scale(0.92);
+}
+
+/* ================= DARK MODE DATA DASHBOARDS & TABLES CONTRAST ================= */
+.dark code {
+    background-color: #27272A !important;
+    color: #34D399 !important;
+    border: 1px solid #3F3F46 !important;
+    padding: 0.125rem 0.35rem;
+    border-radius: 0.35rem;
+}
+
+.dark #field-validation table th,
+.dark #kaggle-dashboard table th {
+    background-color: #27272A !important;
+    color: #E4E4E7 !important;
+    border-color: #3F3F46 !important;
+}
+
+.dark #field-validation table td,
+.dark #kaggle-dashboard table td {
+    border-color: #27272A !important;
+}
+
+.dark #field-validation table tr:hover,
+.dark #kaggle-dashboard table tr:hover {
+    background-color: rgba(39, 39, 42, 0.6) !important;
+}
+
+.dark #field-validation-table-body tr,
+.dark #session-log-table-body tr {
+    border-color: #27272A !important;
+}
+
+.dark #field-validation-table-body tr:hover,
+.dark #session-log-table-body tr:hover {
+    background-color: rgba(39, 39, 42, 0.75) !important;
+}
+
+/* Lightbox & SUS Modal Dark Contrast */
+.dark #image-lightbox-modal .bg-white {
+    background-color: #18181B !important;
+    border-color: #27272A !important;
+}
+
+.dark #sus-modal input[type="text"],
+.dark #sus-modal select {
+    background-color: #27272A !important;
+    border-color: #3F3F46 !important;
+    color: #F4F4F5 !important;
+}
+
+

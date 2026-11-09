@@ -1,0 +1,52 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Temporary & Scratch files
+scratch/
+test/
+missing_report.txt
+*.log
+
+# Obsolete base model
+yolo26n.pt
+
+# Duplicate / backup weights from comparative experiments (hemat >50 MB di repo)
+MusaVision_Sidang_Data/**/weights/
+MusaVision_Sidang_Data/best_yolo26n_clahe.pt
+runs/

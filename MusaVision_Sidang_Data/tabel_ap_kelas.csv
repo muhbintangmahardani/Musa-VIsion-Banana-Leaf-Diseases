@@ -1,0 +1,6 @@
+Kelas Penyakit,Precision (%),Recall (%),AP@50 (%)
+Black Sigatoka,78.07,65.94,72.54
+Cordana,87.75,86.67,92.87
+Fresh,99.56,100.0,99.5
+Pestalotiopsis,67.98,54.91,64.48
+Yellow Sigatoka,87.09,87.07,91.63
