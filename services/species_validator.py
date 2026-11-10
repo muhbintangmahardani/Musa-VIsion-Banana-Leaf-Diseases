@@ -144,8 +144,8 @@ class SpeciesValidatorService:
                 hull = cv2.convexHull(cnt)
                 hull_area = cv2.contourArea(hull)
                 solidity = area / (hull_area + 1e-6)
-                # Daun pisang selalu utuh (entire margin) dengan solidity >= 0.75. Daun menjari memiliki lekukan dalam (< 0.70)
-                if solidity < 0.70:
+                # Daun pisang selalu utuh (entire margin) dengan solidity >= 0.65. Daun dikotil menjari (pepaya/singkong) memiliki lekukan sangat dalam (< 0.55)
+                if solidity < 0.55:
                     is_lobed_leaf = True
                     break
 
