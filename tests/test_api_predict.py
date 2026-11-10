@@ -116,7 +116,23 @@ def test_api_predict_flow():
         assert data6['is_ai_generated'] is False
         print(f"PASS 6 (Real Garden Leaf Upload): {data6['primary_class']} | Valid: {data6['is_valid_banana_leaf']} | Detections: {data6['total_detections']}")
 
-    print("\n=== SEMUA SKENARIO (5/5) SUKSES 100% ===")
+    # Skenario 7: Foto Wajah / Selfie Manusia (Harus Ditolak Gatekeeper sebagai NON_PLANT_OBJECT, BUKAN Black Sigatoka!)
+    face_img = np.full((400, 400, 3), (130, 170, 220), dtype=np.uint8) # warna kulit
+    face_img[150:160, 100:150] = (30, 30, 30) # alis
+    face_img[150:160, 250:300] = (30, 30, 30) # alis
+    face_img[280:295, 150:250] = (70, 70, 180) # bibir
+    _, buffer_face = cv2.imencode('.jpg', face_img)
+    res7 = client.post('/predict', data={'image': (io.BytesIO(buffer_face.tobytes()), 'selfie_face.jpg')}, content_type='multipart/form-data')
+    assert res7.status_code == 200
+    data7 = res7.get_json()
+    assert data7['success'] is True
+    assert data7['is_valid_banana_leaf'] is False
+    assert data7['error_code'] == ErrorCode.NON_PLANT_OBJECT.value
+    assert data7['primary_class'] == 'Bukan Objek Daun Pisang'
+    assert data7['total_detections'] == 0
+    print(f"PASS 7 (Selfie / Human Face): {data7['primary_class']} | Code: {data7['error_code']} | Detections: {data7['total_detections']}")
+
+    print("\n=== SEMUA SKENARIO (6/6) SUKSES 100% ===")
 
 if __name__ == '__main__':
     test_api_predict_flow()

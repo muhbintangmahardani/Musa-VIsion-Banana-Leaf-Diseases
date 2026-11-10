@@ -185,33 +185,11 @@ class DiagnosticPipeline:
             return build_ai_rejection_response()
 
         # -------------------------------------------------------------
-        # STAGE 2: Eksekusi Inferensi YOLO26n Core Terlebih Dahulu
+        # STAGE 2: Validasi Taksonomi Spesies Genus Musa & Filter Objek Non-Daun
+        # Menolak objek non-tumbuhan (wajah/selfie, ruangan, laptop, makanan),
+        # daun pepes bakar, serta daun dikotil tanaman lain SEBELUM inferensi YOLO.
         # -------------------------------------------------------------
-        inference_output = self.inference_service.predict(
-            img_bgr=img_bgr,
-            conf_thresh=conf_thresh,
-            iou_thresh=iou_thresh,
-            use_clahe=use_clahe
-        )
-        total_detections = inference_output.get('total_detections', 0)
-        detections = inference_output.get('detections', [])
-        max_yolo_conf = max([d.get('confidence', 0.0) / 100.0 for d in detections], default=0.0)
-        has_yolo_detections = (total_detections > 0 and max_yolo_conf >= 0.25)
-
-        disease_detections = [d for d in detections if d.get('class_name') != 'Fresh']
-        has_disease_detections = (len(disease_detections) > 0 and max([d.get('confidence', 0.0) / 100.0 for d in disease_detections], default=0.0) >= 0.25)
-        max_disease_conf = max([d.get('confidence', 0.0) / 100.0 for d in disease_detections], default=0.0)
-
-        # -------------------------------------------------------------
-        # STAGE 3: Validasi Taksonomi Spesies Genus Musa dengan Konteks Deteksi YOLO
-        # -------------------------------------------------------------
-        species_result: SpeciesValidationResult = self.species_validator.validate(
-            img_bgr,
-            yolo_has_detections=has_yolo_detections,
-            max_yolo_conf=max_yolo_conf,
-            yolo_disease_detected=has_disease_detections,
-            max_disease_conf=max_disease_conf
-        )
+        species_result: SpeciesValidationResult = self.species_validator.validate(img_bgr)
 
         if not is_preset_sample and not species_result.is_banana_leaf:
             elapsed_ms = round((time.perf_counter() - start_perf) * 1000, 2)
@@ -324,11 +302,21 @@ class DiagnosticPipeline:
             }
 
         # -------------------------------------------------------------
-        # STAGE 4: Verifikasi Forensik Daun Pisang Sintetis (AI Art)
-        # Jika terbukti buatan prompt AI tanpa metadata dan tanpa deteksi riil
+        # STAGE 3: Verifikasi Forensik Daun Pisang Sintetis (AI Art)
+        # Menolak citra buatan AI generator laten tanpa artefak kamera riil
         # -------------------------------------------------------------
-        if not is_preset_sample and ai_result.is_ai_generated and not has_yolo_detections:
+        if not is_preset_sample and ai_result.is_ai_generated:
             return build_ai_rejection_response()
+
+        # -------------------------------------------------------------
+        # STAGE 4: Inferensi Deteksi & Patologi YOLO Core (Spesimen Genus Musa Valid)
+        # -------------------------------------------------------------
+        inference_output = self.inference_service.predict(
+            img_bgr=img_bgr,
+            conf_thresh=conf_thresh,
+            iou_thresh=iou_thresh,
+            use_clahe=use_clahe
+        )
 
         # -------------------------------------------------------------
         # STAGE 5: Pengemasan Hasil Inferensi Diagnostik Final (Daun Pisang Valid)

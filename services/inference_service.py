@@ -270,8 +270,8 @@ class InferenceService:
         class_counter: Dict[str, int] = {}
         total_canvas_area = float(imgsz * imgsz)
 
-        # 3. Post-processing & Ekstraksi Granularitas (Task 3)
-        valid_indices: List[int] = []
+        # 3. Post-processing, Supresi Penahanan Lesi (Containment), & Ekstraksi Granularitas
+        candidates = []
         for idx, box in enumerate(boxes):
             cls_id = int(box.cls[0])
             cls_name = self.class_names[cls_id]
@@ -279,29 +279,63 @@ class InferenceService:
             xyxy = box.xyxy[0].cpu().numpy().tolist()
             x1, y1, x2, y2 = [int(v) for v in xyxy]
 
-            # Verifikasi Bounding Box Foliar (menolak kotak artefak yang menempel pada latar belakang coklat, pot, lantai, atau dinding)
             box_w = max(1, x2 - x1)
             box_h = max(1, y2 - y1)
             box_area = box_w * box_h
 
-            # Verifikasi keterkaitan bounding box dengan kanopi jaringan daun:
-            # Menolak kotak halusinasi yang berada murni di luar area lamina daun (misal dinding/lantai/meja kosong)
             box_canopy = canopy_mask[max(0, y1):min(imgsz, y2), max(0, x1):min(imgsz, x2)]
             canopy_overlap_ratio = np.count_nonzero(box_canopy) / float(box_area)
-            
-            # Jika terdeteksi jaringan daun di citra, kotak harus memiliki kontak dengan lamina daun minimal 10%
             if total_leaf_pixels > 500 and canopy_overlap_ratio < 0.10 and conf < 0.50:
                 continue
+
+            candidates.append({
+                'idx': idx,
+                'cls_name': cls_name,
+                'conf': conf,
+                'xyxy': xyxy,
+                'box_area': box_area,
+                'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2
+            })
+
+        # Supresi Penahanan Lesi Antar-Kelas (Intra-Lesion Containment Suppression):
+        # Jika kotak kecil (misal Black Sigatoka semu) berada di dalam (>60% luas) lesi besar
+        # dari kelas lain (seperti Cordana atau Yellow Sigatoka), supresi kotak kecil sebagai artefak nekrosis internal.
+        suppressed_indices = set()
+        for i, c_large in enumerate(candidates):
+            for j, c_small in enumerate(candidates):
+                if i == j or c_small['idx'] in suppressed_indices:
+                    continue
+                if c_large['box_area'] < 1.8 * c_small['box_area']:
+                    continue
+                ix1 = max(c_large['x1'], c_small['x1'])
+                iy1 = max(c_large['y1'], c_small['y1'])
+                ix2 = min(c_large['x2'], c_small['x2'])
+                iy2 = min(c_large['y2'], c_small['y2'])
+                inter_w = max(0, ix2 - ix1)
+                inter_h = max(0, iy2 - iy1)
+                inter_area = inter_w * inter_h
+                
+                if inter_area >= 0.60 * c_small['box_area']:
+                    if c_large['cls_name'] != c_small['cls_name'] and c_large['conf'] >= (c_small['conf'] - 0.12):
+                        suppressed_indices.add(c_small['idx'])
+
+        valid_indices: List[int] = []
+        for c in candidates:
+            if c['idx'] in suppressed_indices:
+                continue
+            idx = c['idx']
+            cls_name = c['cls_name']
+            conf = c['conf']
+            xyxy = c['xyxy']
+            x1, y1, x2, y2 = c['x1'], c['y1'], c['x2'], c['y2']
 
             valid_indices.append(idx)
             class_counter[cls_name] = class_counter.get(cls_name, 0) + 1
 
-            # Hitung Rasio Luas Kotak terhadap Luas Kanvas 640x640 (%)
             box_w = max(0.0, float(x2 - x1))
             box_h = max(0.0, float(y2 - y1))
             box_area_ratio_pct = round(((box_w * box_h) / total_canvas_area) * 100.0, 2)
 
-            # Metadata Granularitas Anotasi
             gran_info = CLASS_GRANULARITY.get(cls_name, {
                 'granularity_type': 'Deteksi Bounding Box',
                 'count_label': 'Wilayah Deteksi',
@@ -365,15 +399,25 @@ class InferenceService:
             )
             disease_detail = None
         else:
-            diseases_only = [d['class_name'] for d in detections if d['class_name'] != 'Fresh']
+            diseases_only = [d for d in detections if d['class_name'] != 'Fresh']
             if diseases_only:
-                primary_class = max(set(diseases_only), key=diseases_only.count)
-                # Gunakan terminologi Wilayah Deteksi
+                # Perhitungan skor patologi terkalibrasi ilmiah:
+                # Memadukan keyakinan kuadrat (confidence^2) dengan skala luas lesi (sqrt(area_pct)).
+                # Mencegah lesi bintik noise Black Sigatoka kecil mengalahkan lesi besar Cordana/Yellow Sigatoka.
+                class_scores: Dict[str, float] = {}
+                for d in diseases_only:
+                    c = d['class_name']
+                    conf_weight = (d['confidence'] / 100.0) ** 2
+                    area_weight = float(np.sqrt(min(15.0, max(0.5, d.get('box_area_ratio_pct', 1.0)))))
+                    class_scores[c] = class_scores.get(c, 0.0) + (conf_weight * area_weight)
+
+                primary_class = max(class_scores, key=class_scores.get)
+                primary_count = sum(1 for d in diseases_only if d['class_name'] == primary_class)
                 p_gran = CLASS_GRANULARITY.get(primary_class, {})
                 unit_label = p_gran.get('count_label', 'Wilayah Deteksi')
-                summary_title = f"Terindikasi {primary_class} ({len(diseases_only)} {unit_label})"
+                summary_title = f"Terindikasi {primary_class} ({primary_count} {unit_label})"
                 summary_description = (
-                    f"Ditemukan {len(diseases_only)} wilayah deteksi yang bersesuaian dengan "
+                    f"Ditemukan {primary_count} {unit_label.lower()} yang bersesuaian dengan "
                     f"karakteristik patogen {primary_class}."
                 )
             else:

@@ -63,52 +63,52 @@ class SpeciesValidatorService:
         r_ch = img_bgr[:, :, 2].astype(np.float32)
 
         # 1. Klorofil Hijau Daun Hidup (Green Foliar Chlorophyll):
-        # H: 22-98, S >= 18, V >= 20, G > B + 5
+        # Karakteristik daun tumbuhan hidup: H: 24-95, G >= R - 5 dan G > B + 12
         mask_green = (
-            (hsv[:, :, 0] >= 22) & (hsv[:, :, 0] <= 98)
-            & (hsv[:, :, 1] >= 18) & (hsv[:, :, 2] >= 20)
-            & (g_ch > b_ch + 5)
+            (hsv[:, :, 0] >= 24) & (hsv[:, :, 0] <= 95)
+            & (hsv[:, :, 1] >= 25) & (hsv[:, :, 2] >= 25)
+            & (g_ch >= r_ch - 5) & (g_ch > b_ch + 12)
         )
 
         # 2. Lingkaran Halo Klorosis & Daun Menguning (Yellow Chlorosis / Senescence):
-        # Khas pada lesi Yellow Sigatoka, tepi Cordana, dan daun pisang menguning
+        # Khas pada lesi Yellow Sigatoka, tepi Cordana, dan daun menguning aktif
+        # Memiliki warna kuning sejati (absorpsi biru kuat B < 130 dan komponen hijau tinggi G > B + 18)
         mask_halo = (
-            (hsv[:, :, 0] >= 12) & (hsv[:, :, 0] <= 42)
-            & (hsv[:, :, 1] >= 18) & (hsv[:, :, 2] >= 22)
-            & (g_ch > b_ch + 8)
+            (hsv[:, :, 0] >= 15) & (hsv[:, :, 0] <= 32)
+            & (hsv[:, :, 1] >= 35) & (hsv[:, :, 2] >= 35)
+            & (g_ch > b_ch + 18) & (b_ch < 130)
+            & (r_ch <= g_ch + 30)
         )
 
-        # 3. Jaringan Nekrotik / Bercak Lesi Cokelat / Karat Patogen (Foliar Necrosis / Lesions):
-        # Khas pada bercak Black Sigatoka, Cordana, Pestalotiopsis, dan helaian daun pisang mengering alami
-        mask_necrotic = (
-            (hsv[:, :, 0] >= 5) & (hsv[:, :, 0] <= 32)
-            & (hsv[:, :, 1] >= 12) & (hsv[:, :, 2] >= 15) & (hsv[:, :, 2] <= 215)
-            & (r_ch >= b_ch + 3)
-        )
+        # Klorofil & Jaringan Hidup Tanaman (True Living Foliar Chlorophyll):
+        mask_living = mask_green | mask_halo
+        living_pixels = np.count_nonzero(mask_living)
+        living_foliar_ratio = float(living_pixels / total_pixels)
 
-        # 4. Daun Zaitun / Pale Olive Lamina:
-        mask_olive = (
-            (hsv[:, :, 0] >= 18) & (hsv[:, :, 0] <= 65)
-            & (hsv[:, :, 1] >= 10) & (hsv[:, :, 2] >= 15)
-            & (g_ch >= b_ch - 5)
-        )
-
-        # Total Biomassa Jaringan Daun (Foliar Lamina Biomass) = Hijau + Kuning Klorosis + Cokelat Nekrotik + Zaitun
-        mask_foliar = mask_green | mask_halo | mask_necrotic | mask_olive
-        foliar_pixels = np.count_nonzero(mask_foliar)
-        total_foliar_ratio = float(foliar_pixels / total_pixels)
-
-        # 5. Deteksi Warna Kulit Manusia (Human Skin Detector)
-        # Kulit manusia memiliki R > G + 20, R > B + 25, Hue <= 25, Saturation >= 25, Value >= 40
-        # PENTING: Mengecualikan piksel yang sudah teridentifikasi sebagai biomassa daun/nekrosis patogen
+        # 3. Deteksi Warna Kulit Manusia (Human Skin Detector):
+        # Kulit manusia memiliki R > G + 15, R > B + 20, Hue <= 25, Saturation >= 20, Value >= 40
         mask_skin = (
-            (r_ch > g_ch + 20) & (r_ch > b_ch + 25)
-            & (hsv[:, :, 0] <= 25) & (hsv[:, :, 1] >= 25) & (hsv[:, :, 2] >= 40)
-            & (~mask_foliar)
+            (r_ch > g_ch + 15) & (r_ch > b_ch + 20)
+            & (hsv[:, :, 0] <= 25) & (hsv[:, :, 1] >= 20) & (hsv[:, :, 2] >= 40)
         )
         skin_ratio = float(np.count_nonzero(mask_skin) / total_pixels)
 
-        # 6. Daun Pisang Olahan / Matang Kusam (Bungkus Pepes Pasca-Panen)
+        # 4. Jaringan Nekrotik / Bercak Lesi Cokelat / Karat Patogen Daun:
+        # PENTING: Lesi nekrotik daun pisang selalu menempel atau berada di sekitar lamina daun hidup
+        leaf_vicinity = cv2.dilate(mask_living.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (35, 35))) > 0
+        mask_necrotic = (
+            (hsv[:, :, 0] >= 5) & (hsv[:, :, 0] <= 32)
+            & (hsv[:, :, 1] >= 15) & (hsv[:, :, 2] >= 15) & (hsv[:, :, 2] <= 215)
+            & (r_ch >= b_ch + 3)
+            & leaf_vicinity
+        )
+
+        # Total Biomassa Jaringan Daun (Foliar Lamina Biomass) = Jaringan Hidup + Lesi Nekrotik di atas daun
+        mask_foliar = mask_living | mask_necrotic
+        foliar_pixels = np.count_nonzero(mask_foliar)
+        total_foliar_ratio = float(foliar_pixels / total_pixels)
+
+        # 5. Daun Pisang Olahan / Matang Kusam (Bungkus Pepes Pasca-Panen)
         mask_dull_cooked = (
             (hsv[:, :, 0] >= 15) & (hsv[:, :, 0] <= 55)
             & (hsv[:, :, 1] >= 20)
@@ -117,7 +117,7 @@ class SpeciesValidatorService:
         )
         dull_leaf_ratio = float(np.count_nonzero(mask_dull_cooked) / total_pixels)
 
-        # 7. Arang / Hangus Gosong Pembakaran (V <= 28)
+        # 6. Arang / Hangus Gosong Pembakaran (V <= 28)
         mask_charred = (hsv[:, :, 2] <= 28)
         dull_dilated = cv2.dilate(mask_dull_cooked.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
         mask_leaf_charred = mask_charred & (dull_dilated > 0)
@@ -129,7 +129,6 @@ class SpeciesValidatorService:
 
         green_ratio = float(green_pixels / total_pixels)
         halo_ratio = float(halo_pixels / total_pixels)
-        living_foliar_ratio = total_foliar_ratio
 
         # Mask daun untuk penentuan bounding box ROI dan analisis tekstur internal lamina
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -166,7 +165,8 @@ class SpeciesValidatorService:
         return {
             'mask_leaf': cleaned_foliar,
             'eroded_mask': eroded_mask,
-            'veg_ratio': living_foliar_ratio,
+            'veg_ratio': total_foliar_ratio,
+            'living_foliar_ratio': living_foliar_ratio,
             'living_ratio': green_ratio,
             'green_ratio': green_ratio,
             'halo_ratio': halo_ratio,
@@ -259,9 +259,9 @@ class SpeciesValidatorService:
     ) -> SpeciesValidationResult:
         """
         Menjalankan validasi taksonomi genus Musa terkalibrasi cerdas.
-        Mengintegrasikan temuan deteksi objek YOLO untuk menjamin daun pisang
-        berpenyakit (nekrotik/klorotik) tidak pernah ditolak secara salah,
-        sembari tetap menolak objek non-tumbuhan dan daun spesies lain.
+        Evaluasi ketat morfologi foliar: HANYA daun tanaman pisang hidup yang lolos.
+        Menolak secara tegas objek non-tanaman (wajah, selfie, hewan, ruangan, benda mati),
+        daun pepes olahan matang/bakar, dan daun tanaman hias/dikotil spesies lain.
         """
         if img_bgr is None or img_bgr.size == 0:
             return SpeciesValidationResult(
@@ -284,6 +284,7 @@ class SpeciesValidatorService:
         green_ratio = b_metrics['green_ratio']
         halo_ratio = b_metrics['halo_ratio']
         veg_ratio = b_metrics['veg_ratio']
+        living_foliar_ratio = b_metrics['living_foliar_ratio']
         charred_ratio = b_metrics['charred_ratio']
         leaf_charred_ratio = b_metrics['leaf_charred_ratio']
         dull_leaf_ratio = b_metrics['dull_leaf_ratio']
@@ -295,40 +296,40 @@ class SpeciesValidatorService:
         parallelism = self._compute_venation_coherence(gray, leaf_mask)
 
         # -----------------------------------------------------------------
-        # JALUR 1: BUKAN OBJEK TUMBUHAN (veg_ratio < 0.15 ATAU dominasi kulit manusia tanpa daun)
+        # JALUR 1: BUKAN OBJEK TUMBUHAN (living_foliar_ratio < 0.12 ATAU dominasi kulit manusia)
         # Objek manusia, wajah/selfie, ruangan, laptop, meja, pakaian,
         # makanan, barang sehari-hari, lantai, atau benda mati lainnya.
         # -----------------------------------------------------------------
-        if veg_ratio < 0.15 or (skin_ratio > 0.35 and veg_ratio < 0.20):
+        if living_foliar_ratio < 0.12 or (skin_ratio > 0.20 and living_foliar_ratio < 0.20):
             return SpeciesValidationResult(
                 is_banana_leaf=False,
                 error_code=ErrorCode.NON_PLANT_OBJECT.value,
                 detected_category="Bukan Objek Daun Pisang",
-                banana_confidence=round(veg_ratio * 20.0, 1),
+                banana_confidence=round(living_foliar_ratio * 20.0, 1),
                 vegetation_ratio=round(veg_ratio * 100, 1),
-                living_chlorophyll_ratio=round(green_ratio * 100, 1),
+                living_chlorophyll_ratio=round(living_foliar_ratio * 100, 1),
                 charred_soot_ratio=round(charred_ratio * 100, 1),
                 gabor_anisotropy=round(gabor_anisotropy, 3),
                 venation_parallelism=round(parallelism, 3),
                 reason=(
-                    f"Rasio biomassa daun pada citra hanya {veg_ratio*100:.1f}% (minimal {self.min_vegetation_ratio*100:.0f}%). "
-                    "Citra tidak menampilkan permukaan helai daun tanaman hidup atau terhalang oleh objek non-daun."
+                    f"Rasio klorofil daun hidup pada citra hanya {living_foliar_ratio*100:.1f}% (minimal {self.min_vegetation_ratio*100:.0f}%). "
+                    "Citra tidak menampilkan permukaan helai daun tanaman hidup atau terhalang oleh objek non-daun (wajah, manusia, atau ruangan)."
                 ),
-                guidance="Arahkan kamera secara fokus ke permukaan helai daun pisang dan singkirkan objek selain daun."
+                guidance="Arahkan kamera secara fokus ke permukaan helai daun pohon pisang hidup dan singkirkan objek selain daun."
             )
 
         # -----------------------------------------------------------------
         # JALUR 2: DAUN BAKAR / OLAHAN PEPES (Arang gosong pembakaran)
         # Menolak daun pepes olahan matang yang dibakar arang
         # -----------------------------------------------------------------
-        if (charred_ratio > 0.18 and dull_leaf_ratio > 0.20 and green_ratio < 0.15) or (charred_ratio > 0.35 and veg_ratio < 0.15):
+        if charred_ratio > self.max_charred_soot or (charred_ratio > 0.04 and dull_leaf_ratio > 0.15):
             return SpeciesValidationResult(
                 is_banana_leaf=False,
                 error_code=ErrorCode.NON_PLANT_OBJECT.value,
                 detected_category="Bukan Objek Daun Pisang",
                 banana_confidence=10.0,
                 vegetation_ratio=round(veg_ratio * 100, 1),
-                living_chlorophyll_ratio=round(green_ratio * 100, 1),
+                living_chlorophyll_ratio=round(living_foliar_ratio * 100, 1),
                 charred_soot_ratio=round(charred_ratio * 100, 1),
                 gabor_anisotropy=round(gabor_anisotropy, 3),
                 venation_parallelism=round(parallelism, 3),
@@ -347,7 +348,7 @@ class SpeciesValidatorService:
                 detected_category="Daun Tanaman Lain (Bukan Genus Musa)",
                 banana_confidence=round(gabor_anisotropy * 50.0, 1),
                 vegetation_ratio=round(veg_ratio * 100, 1),
-                living_chlorophyll_ratio=round(green_ratio * 100, 1),
+                living_chlorophyll_ratio=round(living_foliar_ratio * 100, 1),
                 charred_soot_ratio=round(charred_ratio * 100, 1),
                 gabor_anisotropy=round(gabor_anisotropy, 3),
                 venation_parallelism=round(parallelism, 3),
@@ -362,35 +363,8 @@ class SpeciesValidatorService:
             )
 
         # -----------------------------------------------------------------
-        # JALUR 4: DAUN PISANG BERPENYAKIT TERKONFIRMASI YOLO
-        # Jika model YOLO mendeteksi patogen spesifik daun pisang (Black Sigatoka, Cordana,
-        # Yellow Sigatoka, Pestalotiopsis) dengan keyakinan memadai (>= 0.25) pada daun non-lobed
-        # dengan biomassa foliar (>= 8%), spesimen terverifikasi daun pisang!
-        # Lesi patogen menutupi sebagian serat sejajar, sehingga deteksi penyakit
-        # menjadi bukti primer diagnosis patologi daun pisang.
-        # -----------------------------------------------------------------
-        if yolo_disease_detected and max_disease_conf >= 0.25 and veg_ratio >= 0.08:
-            banana_confidence = round(min(99.0, max(88.0, max_disease_conf * 100.0)), 1)
-            return SpeciesValidationResult(
-                is_banana_leaf=True,
-                error_code="",
-                detected_category="Daun Pisang Hidup (Musa spp.)",
-                banana_confidence=banana_confidence,
-                vegetation_ratio=round(veg_ratio * 100, 1),
-                living_chlorophyll_ratio=round(green_ratio * 100, 1),
-                charred_soot_ratio=round(charred_ratio * 100, 1),
-                gabor_anisotropy=round(gabor_anisotropy, 3),
-                venation_parallelism=round(parallelism, 3),
-                reason=(
-                    f"Model deteksi YOLO mengonfirmasi keberadaan lesi patologi foliar khas genus Musa "
-                    f"dengan keyakinan {max_disease_conf*100:.1f}% dan biomassa lamina daun {veg_ratio*100:.1f}%."
-                ),
-                guidance="Spesimen terverifikasi sebagai daun pisang (Musa spp.). Deteksi penyakit aktif."
-            )
-
-        # -----------------------------------------------------------------
-        # JALUR 5: DAUN TANAMAN SPESIES LAIN (NON-BANANA LEAF TANPA LESI PISANG)
-        # Menolak tanaman hias pot / dikotil yang tidak memiliki pertulangan serat monokotil
+        # JALUR 4: DAUN TANAMAN SPESIES LAIN (NON-BANANA LEAF / SERAT BUKAN MONOKOTIL SEJAJAR)
+        # Menolak tanaman hias pot / dikotil yang tidak memiliki pertulangan serat monokotil sejajar
         # -----------------------------------------------------------------
         if gabor_anisotropy < self.min_gabor_anisotropy or parallelism < self.min_parallelism:
             return SpeciesValidationResult(
@@ -399,7 +373,7 @@ class SpeciesValidatorService:
                 detected_category="Daun Tanaman Lain (Bukan Genus Musa)",
                 banana_confidence=round(gabor_anisotropy * 50.0, 1),
                 vegetation_ratio=round(veg_ratio * 100, 1),
-                living_chlorophyll_ratio=round(green_ratio * 100, 1),
+                living_chlorophyll_ratio=round(living_foliar_ratio * 100, 1),
                 charred_soot_ratio=round(charred_ratio * 100, 1),
                 gabor_anisotropy=round(gabor_anisotropy, 3),
                 venation_parallelism=round(parallelism, 3),
@@ -415,7 +389,7 @@ class SpeciesValidatorService:
             )
 
         # -----------------------------------------------------------------
-        # JALUR 6: DAUN PISANG HIDUP SEHAT / GENUS MUSA TERVERIFIKASI
+        # JALUR 5: DAUN PISANG HIDUP SEHAT / GENUS MUSA TERVERIFIKASI
         # -----------------------------------------------------------------
         norm_aniso = min(1.0, gabor_anisotropy / 0.95)
         banana_confidence = round(min(98.5, max(75.0, norm_aniso * 98.0)), 1)
@@ -425,7 +399,7 @@ class SpeciesValidatorService:
             detected_category="Daun Pisang Hidup (Musa spp.)",
             banana_confidence=banana_confidence,
             vegetation_ratio=round(veg_ratio * 100, 1),
-            living_chlorophyll_ratio=round(green_ratio * 100, 1),
+            living_chlorophyll_ratio=round(living_foliar_ratio * 100, 1),
             charred_soot_ratio=round(charred_ratio * 100, 1),
             gabor_anisotropy=round(gabor_anisotropy, 3),
             venation_parallelism=round(parallelism, 3),
