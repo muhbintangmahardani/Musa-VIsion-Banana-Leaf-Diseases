@@ -72,12 +72,13 @@ class SpeciesValidatorService:
 
         # 2. Lingkaran Halo Klorosis & Daun Menguning (Yellow Chlorosis / Senescence):
         # Khas pada lesi Yellow Sigatoka, tepi Cordana, dan daun menguning aktif
-        # Memiliki warna kuning sejati (absorpsi biru kuat B < 130 dan komponen hijau tinggi G > B + 18)
+        # Memiliki warna kuning sejati daun tanaman (absorpsi biru kuat B < 140 dan komponen hijau klorofil b: G >= R - 6)
+        # Menolak secara biologis warna kulit manusia yang selalu memiliki R jauh lebih tinggi dari G (R > G + 15)
         mask_halo = (
-            (hsv[:, :, 0] >= 15) & (hsv[:, :, 0] <= 32)
-            & (hsv[:, :, 1] >= 35) & (hsv[:, :, 2] >= 35)
-            & (g_ch > b_ch + 18) & (b_ch < 130)
-            & (r_ch <= g_ch + 30)
+            (hsv[:, :, 0] >= 14) & (hsv[:, :, 0] <= 34)
+            & (hsv[:, :, 1] >= 30) & (hsv[:, :, 2] >= 30)
+            & (g_ch > b_ch + 15) & (b_ch < 140)
+            & (g_ch >= r_ch - 6)
         )
 
         # Klorofil & Jaringan Hidup Tanaman (True Living Foliar Chlorophyll):
@@ -302,11 +303,12 @@ class SpeciesValidatorService:
         parallelism = self._compute_venation_coherence(gray, leaf_mask)
 
         # -----------------------------------------------------------------
-        # JALUR 1: BUKAN OBJEK TUMBUHAN (living_foliar_ratio < 0.12 ATAU dominasi kulit manusia)
+        # JALUR 1: BUKAN OBJEK TUMBUHAN (living_foliar_ratio < 0.15)
         # Objek manusia, wajah/selfie, ruangan, laptop, meja, pakaian,
         # makanan, barang sehari-hari, lantai, atau benda mati lainnya.
+        # Menolak mutlak citra tanpa klorofil aktif tanaman hidup minimal 15%.
         # -----------------------------------------------------------------
-        if living_foliar_ratio < 0.12 or (skin_ratio > 0.20 and living_foliar_ratio < 0.20):
+        if living_foliar_ratio < 0.15:
             return SpeciesValidationResult(
                 is_banana_leaf=False,
                 error_code=ErrorCode.NON_PLANT_OBJECT.value,
