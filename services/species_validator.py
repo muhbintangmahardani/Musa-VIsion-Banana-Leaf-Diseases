@@ -205,7 +205,13 @@ class SpeciesValidatorService:
             min_e = min(energies)
             return float((max_e - min_e) / (max_e + min_e + 1e-6))
 
-        aniso_center = _calc_aniso(center_patch)
+        # PENTING: Patch tengah HANYA boleh dihitung jika patch tengah didominasi lamina daun (mask_leaf >= 30%)
+        # Mencegah wajah manusia (mata/alis/bibir horizontal) terhitung sebagai serat daun pisang (anisotropi semu)!
+        aniso_center = 0.0
+        if mask_leaf is not None:
+            center_mask = mask_leaf[cy - r_h : cy + r_h, cx - r_w : cx + r_w]
+            if np.count_nonzero(center_mask) >= (0.30 * center_patch.size):
+                aniso_center = _calc_aniso(center_patch)
 
         # Jika ada mask_leaf dengan komponen besar, hitung juga pada komponen terbesar
         aniso_roi = 0.0
@@ -213,8 +219,8 @@ class SpeciesValidatorService:
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_leaf)
             if num_labels > 1:
                 largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
-                x, y, w_box, h_box, _ = stats[largest_label]
-                if w_box > 30 and h_box > 30:
+                x, y, w_box, h_box, area_box = stats[largest_label]
+                if area_box >= (0.05 * h * w) and w_box > 30 and h_box > 30:
                     roi = gray_img[y:y+h_box, x:x+w_box]
                     aniso_roi = _calc_aniso(roi)
 
