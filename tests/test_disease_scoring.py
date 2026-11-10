@@ -30,13 +30,7 @@ def test_disease_scoring_and_containment():
     ]
     
     diseases_only = [d for d in mock_detections if d['class_name'] != 'Fresh']
-    class_scores = {}
-    for d in diseases_only:
-        c = d['class_name']
-        conf_weight = (d['confidence'] / 100.0) ** 2
-        area_weight = float(np.sqrt(min(15.0, max(0.5, d.get('box_area_ratio_pct', 1.0)))))
-        class_scores[c] = class_scores.get(c, 0.0) + (conf_weight * area_weight)
-        
+    class_scores = inf.compute_disease_scores(diseases_only)
     primary_class = max(class_scores, key=class_scores.get)
     print(f"[TEST CORDANA VS NOISE] Scores: {class_scores} -> Winner: {primary_class}")
     assert primary_class == 'Cordana', f"Cordana harus menang tetapi didapat: {primary_class}"
@@ -49,16 +43,25 @@ def test_disease_scoring_and_containment():
         {'class_name': 'Black Sigatoka', 'confidence': 27.0, 'box_area_ratio_pct': 0.3},
     ]
     
-    class_scores_ys = {}
-    for d in mock_detections_ys:
-        c = d['class_name']
-        conf_weight = (d['confidence'] / 100.0) ** 2
-        area_weight = float(np.sqrt(min(15.0, max(0.5, d.get('box_area_ratio_pct', 1.0)))))
-        class_scores_ys[c] = class_scores_ys.get(c, 0.0) + (conf_weight * area_weight)
-        
+    diseases_only_ys = [d for d in mock_detections_ys if d['class_name'] != 'Fresh']
+    class_scores_ys = inf.compute_disease_scores(diseases_only_ys)
     primary_class_ys = max(class_scores_ys, key=class_scores_ys.get)
     print(f"[TEST YELLOW SIGATOKA VS NOISE] Scores: {class_scores_ys} -> Winner: {primary_class_ys}")
     assert primary_class_ys == 'Yellow Sigatoka', f"Yellow Sigatoka harus menang tetapi didapat: {primary_class_ys}"
+
+    # 3. Simulasi Kasus Pestalotiopsis Fokal (Area Kecil) vs Noise Black Sigatoka
+    # Lesi Pestalotiopsis memiliki area kecil (2.5%) namun confidence tinggi (88.0%)
+    mock_detections_pest = [
+        {'class_name': 'Pestalotiopsis', 'confidence': 88.0, 'box_area_ratio_pct': 2.5},
+        {'class_name': 'Black Sigatoka', 'confidence': 32.0, 'box_area_ratio_pct': 11.0},
+        {'class_name': 'Black Sigatoka', 'confidence': 29.0, 'box_area_ratio_pct': 8.5},
+    ]
+    diseases_only_pest = [d for d in mock_detections_pest if d['class_name'] != 'Fresh']
+    class_scores_pest = inf.compute_disease_scores(diseases_only_pest)
+    primary_class_pest = max(class_scores_pest, key=class_scores_pest.get)
+    print(f"[TEST PESTALOTIOPSIS VS NOISE] Scores: {class_scores_pest} -> Winner: {primary_class_pest}")
+    assert primary_class_pest == 'Pestalotiopsis', f"Pestalotiopsis harus menang tetapi didapat: {primary_class_pest}"
+    assert class_scores_pest['Pestalotiopsis'] > class_scores_pest['Black Sigatoka'] * 5, "Pestalotiopsis harus unggul telak!"
 
     print("=== SELURUH PENGUJIAN SKORING DIAGNOSIS PATOLOGI LULUS DENGAN SEMPURNA ===")
 

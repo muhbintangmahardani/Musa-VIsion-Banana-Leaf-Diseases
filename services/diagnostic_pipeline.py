@@ -185,15 +185,15 @@ class DiagnosticPipeline:
             return build_ai_rejection_response()
 
         # -------------------------------------------------------------
-        # STAGE 2: Validasi Taksonomi Spesies Genus Musa & Filter Objek Non-Daun
+        # STAGE 2: Validasi Taksonomi Spesies Genus Musa & Filter Objek Non-Daun Awal
         # Menolak objek non-tumbuhan (wajah/selfie, ruangan, laptop, makanan),
-        # daun pepes bakar, serta daun dikotil tanaman lain SEBELUM inferensi YOLO.
+        # daun pepes bakar, serta daun dikotil menjari SEBELUM inferensi YOLO.
         # -------------------------------------------------------------
         species_result: SpeciesValidationResult = self.species_validator.validate(img_bgr)
 
-        if not is_preset_sample and not species_result.is_banana_leaf:
+        def build_species_rejection_response(spec_res: SpeciesValidationResult) -> Dict[str, Any]:
             elapsed_ms = round((time.perf_counter() - start_perf) * 1000, 2)
-            err_code = species_result.error_code or ErrorCode.NON_BANANA_LEAF.value
+            err_code = spec_res.error_code or ErrorCode.NON_BANANA_LEAF.value
 
             # Kustomisasi judul, overlay, dan knowledge base berdasarkan jenis penolakan
             if err_code == ErrorCode.NON_PLANT_OBJECT.value:
@@ -269,7 +269,7 @@ class DiagnosticPipeline:
                 'validation_stage': 'STAGE_2_SPECIES_VALIDATION',
                 'primary_class': primary_class,
                 'summary_title': summary_title,
-                'summary_description': species_result.reason,
+                'summary_description': spec_res.reason,
                 'disease_info': knowledge_base,
                 'total_detections': 0,
                 'total_regions': 0,
@@ -292,14 +292,20 @@ class DiagnosticPipeline:
                 'annotated_result_base64': annotated_b64,
                 'annotated_image': annotated_b64,
                 'metrics': {
-                    'banana_confidence': species_result.banana_confidence,
-                    'vegetation_ratio': species_result.vegetation_ratio,
-                    'living_chlorophyll_ratio': species_result.living_chlorophyll_ratio,
-                    'charred_soot_ratio': species_result.charred_soot_ratio,
-                    'gabor_anisotropy': species_result.gabor_anisotropy,
-                    'venation_parallelism': species_result.venation_parallelism
+                    'banana_confidence': spec_res.banana_confidence,
+                    'vegetation_ratio': spec_res.vegetation_ratio,
+                    'living_chlorophyll_ratio': spec_res.living_chlorophyll_ratio,
+                    'charred_soot_ratio': spec_res.charred_soot_ratio,
+                    'gabor_anisotropy': spec_res.gabor_anisotropy,
+                    'venation_parallelism': spec_res.venation_parallelism
                 }
             }
+
+        # Penolakan Awal: Jika citra adalah objek non-tumbuhan (selfie/wajah/ruangan), pepes bakar, atau daun menjari:
+        # Langsung tolak tanpa perlu proses inferensi model
+        if not is_preset_sample and not species_result.is_banana_leaf:
+            if species_result.error_code in [ErrorCode.NON_PLANT_OBJECT.value, ErrorCode.INVALID_IMAGE.value] or species_result.gabor_anisotropy < 0.50:
+                return build_species_rejection_response(species_result)
 
         # -------------------------------------------------------------
         # STAGE 3: Verifikasi Forensik Daun Pisang Sintetis (AI Art)
@@ -319,7 +325,26 @@ class DiagnosticPipeline:
         )
 
         # -------------------------------------------------------------
-        # STAGE 5: Pengemasan Hasil Inferensi Diagnostik Final (Daun Pisang Valid)
+        # STAGE 5: Konfirmasi Taksonomi Pasca-YOLO
+        # Jika nilai Gabor awal di bawah 0.80 akibat lesi nekrotik luas (Pestalotiopsis / Cordana),
+        # periksa apakah model YOLO mengonfirmasi patogen spesifik daun pisang.
+        # -------------------------------------------------------------
+        detections = inference_output.get('detections', [])
+        specific_diseases = [d for d in detections if d['class_name'] in ['Pestalotiopsis', 'Cordana', 'Yellow Sigatoka']]
+        max_specific_conf = max([d['confidence'] for d in specific_diseases]) if specific_diseases else 0.0
+
+        final_species_result = self.species_validator.validate(
+            img_bgr,
+            yolo_disease_detected=len(specific_diseases) > 0,
+            max_disease_conf=max_specific_conf,
+            specific_disease_detected=len(specific_diseases) > 0
+        )
+
+        if not is_preset_sample and not final_species_result.is_banana_leaf:
+            return build_species_rejection_response(final_species_result)
+
+        # -------------------------------------------------------------
+        # STAGE 6: Pengemasan Hasil Inferensi Diagnostik Final (Daun Pisang Valid)
         # -------------------------------------------------------------
         inference_output['is_valid_banana_leaf'] = True
         inference_output['is_ai_generated'] = False
@@ -328,12 +353,12 @@ class DiagnosticPipeline:
             'is_ai_generated': False,
             'ai_confidence_score': ai_result.ai_score,
             'is_banana_leaf': True,
-            'detected_category': species_result.detected_category,
-            'banana_domain_score': species_result.banana_confidence,
-            'vegetation_ratio': species_result.vegetation_ratio,
-            'living_chlorophyll_ratio': species_result.living_chlorophyll_ratio,
-            'gabor_anisotropy': species_result.gabor_anisotropy,
-            'venation_parallelism': species_result.venation_parallelism
+            'detected_category': final_species_result.detected_category,
+            'banana_domain_score': final_species_result.banana_confidence,
+            'vegetation_ratio': final_species_result.vegetation_ratio,
+            'living_chlorophyll_ratio': final_species_result.living_chlorophyll_ratio,
+            'gabor_anisotropy': final_species_result.gabor_anisotropy,
+            'venation_parallelism': final_species_result.venation_parallelism
         }
 
         return inference_output

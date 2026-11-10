@@ -165,6 +165,7 @@ class SpeciesValidatorService:
 
         return {
             'mask_leaf': cleaned_foliar,
+            'mask_green': mask_green,
             'eroded_mask': eroded_mask,
             'veg_ratio': total_foliar_ratio,
             'living_foliar_ratio': living_foliar_ratio,
@@ -179,11 +180,17 @@ class SpeciesValidatorService:
             'internal_mag_mean': internal_mag_mean
         }
 
-    def _compute_gabor_anisotropy(self, gray_img: np.ndarray, mask_leaf: Optional[np.ndarray] = None) -> float:
+    def _compute_gabor_anisotropy(
+        self,
+        gray_img: np.ndarray,
+        mask_leaf: Optional[np.ndarray] = None,
+        mask_green: Optional[np.ndarray] = None
+    ) -> float:
         """
         Menghitung anisotropi orientasi menggunakan bank Gabor filter pada 8 arah sudut.
-        Dihitung pada wilayah lamina daun utama dan patch tengah agar tekstur pohon/latar
-        kebun tidak mengacaukan pola serat menyirip sejajar khas genus Musa.
+        Menggunakan teknik multi-region sampling (citra penuh, patch tengah, komponen daun terbesar,
+        dan kuadran foliar aktif) agar lesi nekrotik lokal (Cordana / Pestalotiopsis) tidak
+        menghalangi verifikasi serat menyirip sejajar khas genus Musa.
         """
         h, w = gray_img.shape
         cy, cx = h // 2, w // 2
@@ -206,16 +213,19 @@ class SpeciesValidatorService:
             min_e = min(energies)
             return float((max_e - min_e) / (max_e + min_e + 1e-6))
 
-        # PENTING: Patch tengah HANYA boleh dihitung jika patch tengah didominasi lamina daun (mask_leaf >= 30%)
-        # Mencegah wajah manusia (mata/alis/bibir horizontal) terhitung sebagai serat daun pisang (anisotropi semu)!
-        aniso_center = 0.0
+        aniso_scores = []
+
+        # 1. Evaluasi citra penuh jika tutupan helai daun >= 75% bidang bidik (foto close-up/makro)
+        if mask_leaf is not None and (np.count_nonzero(mask_leaf) / (h * w)) >= 0.75:
+            aniso_scores.append(_calc_aniso(gray_img))
+
+        # 2. Patch tengah: dihitung jika patch didominasi lamina daun (mask_leaf >= 30%)
         if mask_leaf is not None:
             center_mask = mask_leaf[cy - r_h : cy + r_h, cx - r_w : cx + r_w]
             if np.count_nonzero(center_mask) >= (0.30 * center_patch.size):
-                aniso_center = _calc_aniso(center_patch)
+                aniso_scores.append(_calc_aniso(center_patch))
 
-        # Jika ada mask_leaf dengan komponen besar, hitung juga pada komponen terbesar
-        aniso_roi = 0.0
+        # 3. Komponen terbesar (ROI) dan sub-kuadran daun aktif
         if mask_leaf is not None and np.count_nonzero(mask_leaf) > 500:
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_leaf)
             if num_labels > 1:
@@ -223,9 +233,32 @@ class SpeciesValidatorService:
                 x, y, w_box, h_box, area_box = stats[largest_label]
                 if area_box >= (0.05 * h * w) and w_box > 30 and h_box > 30:
                     roi = gray_img[y:y+h_box, x:x+w_box]
-                    aniso_roi = _calc_aniso(roi)
+                    aniso_scores.append(_calc_aniso(roi))
 
-        return float(max(aniso_center, aniso_roi))
+                    # Jika komponen adalah helai daun besar kontinu (luas >= 30% kanvas):
+                    # Periksa 4 sub-kuadran untuk menemukan wilayah lamina utuh yang bebas lesi nekrosis
+                    if area_box >= (0.30 * h * w):
+                        half_w = w_box // 2
+                        half_h = h_box // 2
+                        sub_quads = [
+                            (y, x, half_h, half_w),
+                            (y, x + half_w, half_h, half_w),
+                            (y + half_h, x, half_h, half_w),
+                            (y + half_h, x + half_w, half_h, half_w),
+                        ]
+                        for sy, sx, sh, sw in sub_quads:
+                            if sh > 30 and sw > 30:
+                                s_mask = mask_leaf[sy:sy+sh, sx:sx+sw]
+                                # Jika ada mask_green, kuadran harus memiliki klorofil aktif >= 25%
+                                green_ok = True
+                                if mask_green is not None:
+                                    s_green = mask_green[sy:sy+sh, sx:sx+sw]
+                                    green_ok = np.count_nonzero(s_green) >= (0.25 * sh * sw)
+                                if np.count_nonzero(s_mask) >= (0.50 * sh * sw) and green_ok:
+                                    s_gray = gray_img[sy:sy+sh, sx:sx+sw]
+                                    aniso_scores.append(_calc_aniso(s_gray))
+
+        return float(max(aniso_scores)) if aniso_scores else 0.0
 
     def _compute_venation_coherence(self, gray_img: np.ndarray, mask: np.ndarray) -> float:
         """
@@ -262,7 +295,8 @@ class SpeciesValidatorService:
         yolo_has_detections: bool = False,
         max_yolo_conf: float = 0.0,
         yolo_disease_detected: bool = False,
-        max_disease_conf: float = 0.0
+        max_disease_conf: float = 0.0,
+        specific_disease_detected: bool = False
     ) -> SpeciesValidationResult:
         """
         Menjalankan validasi taksonomi genus Musa terkalibrasi cerdas.
@@ -297,18 +331,19 @@ class SpeciesValidatorService:
         dull_leaf_ratio = b_metrics['dull_leaf_ratio']
         skin_ratio = b_metrics['skin_ratio']
         leaf_mask = b_metrics['mask_leaf']
+        mask_green = b_metrics.get('mask_green')
         is_lobed = b_metrics.get('is_lobed_leaf', False)
 
-        gabor_anisotropy = self._compute_gabor_anisotropy(gray, leaf_mask)
+        gabor_anisotropy = self._compute_gabor_anisotropy(gray, leaf_mask, mask_green)
         parallelism = self._compute_venation_coherence(gray, leaf_mask)
 
         # -----------------------------------------------------------------
-        # JALUR 1: BUKAN OBJEK TUMBUHAN (living_foliar_ratio < 0.15)
-        # Objek manusia, wajah/selfie, ruangan, laptop, meja, pakaian,
-        # makanan, barang sehari-hari, lantai, atau benda mati lainnya.
-        # Menolak mutlak citra tanpa klorofil aktif tanaman hidup minimal 15%.
+        # JALUR 1: BUKAN OBJEK TUMBUHAN
+        # Menolak objek wajah manusia/selfie (skin_ratio > 0.18 & living < 0.15),
+        # ruangan/benda mati (veg_ratio < 0.10), atau klorofil sangat minim (living < 0.04 & veg < 0.25).
+        # Tetap meloloskan daun pisang yang mengalami nekrosis bercak luas karena memiliki veg_ratio tinggi.
         # -----------------------------------------------------------------
-        if living_foliar_ratio < 0.15:
+        if (skin_ratio > 0.18 and living_foliar_ratio < 0.15) or (veg_ratio < 0.10) or (living_foliar_ratio < 0.04 and veg_ratio < 0.25):
             return SpeciesValidationResult(
                 is_banana_leaf=False,
                 error_code=ErrorCode.NON_PLANT_OBJECT.value,
@@ -320,7 +355,7 @@ class SpeciesValidatorService:
                 gabor_anisotropy=round(gabor_anisotropy, 3),
                 venation_parallelism=round(parallelism, 3),
                 reason=(
-                    f"Rasio klorofil daun hidup pada citra hanya {living_foliar_ratio*100:.1f}% (minimal {self.min_vegetation_ratio*100:.0f}%). "
+                    f"Rasio klorofil daun hidup pada citra hanya {living_foliar_ratio*100:.1f}% (biomassa foliar: {veg_ratio*100:.1f}%). "
                     "Citra tidak menampilkan permukaan helai daun tanaman hidup atau terhalang oleh objek non-daun (wajah, manusia, atau ruangan)."
                 ),
                 guidance="Arahkan kamera secara fokus ke permukaan helai daun pohon pisang hidup dan singkirkan objek selain daun."
@@ -328,22 +363,25 @@ class SpeciesValidatorService:
 
         # -----------------------------------------------------------------
         # JALUR 2: DAUN BAKAR / OLAHAN PEPES (Arang gosong pembakaran)
-        # Menolak daun pepes olahan matang yang dibakar arang
+        # Menolak daun pepes olahan matang yang dibakar arang.
+        # HANYA dapat terjadi jika klorofil aktif tanaman hidup telah terdenaturasi (green_ratio < 0.08).
+        # Daun hidup dengan bayangan gelap di kebun tidak akan tertolak secara keliru.
         # -----------------------------------------------------------------
-        if charred_ratio > self.max_charred_soot or (charred_ratio > 0.04 and dull_leaf_ratio > 0.15):
-            return SpeciesValidationResult(
-                is_banana_leaf=False,
-                error_code=ErrorCode.NON_PLANT_OBJECT.value,
-                detected_category="Bukan Objek Daun Pisang",
-                banana_confidence=10.0,
-                vegetation_ratio=round(veg_ratio * 100, 1),
-                living_chlorophyll_ratio=round(living_foliar_ratio * 100, 1),
-                charred_soot_ratio=round(charred_ratio * 100, 1),
-                gabor_anisotropy=round(gabor_anisotropy, 3),
-                venation_parallelism=round(parallelism, 3),
-                reason="Citra teridentifikasi sebagai daun olahan / terbakar arang (bukan daun tanaman hidup di pohon).",
-                guidance="Arahkan kamera ke helai daun pohon pisang hidup di kebun."
-            )
+        if green_ratio < 0.08:
+            if leaf_charred_ratio > 0.08 or charred_ratio > self.max_charred_soot or (charred_ratio > 0.05 and dull_leaf_ratio > 0.25):
+                return SpeciesValidationResult(
+                    is_banana_leaf=False,
+                    error_code=ErrorCode.NON_PLANT_OBJECT.value,
+                    detected_category="Bukan Objek Daun Pisang",
+                    banana_confidence=10.0,
+                    vegetation_ratio=round(veg_ratio * 100, 1),
+                    living_chlorophyll_ratio=round(living_foliar_ratio * 100, 1),
+                    charred_soot_ratio=round(charred_ratio * 100, 1),
+                    gabor_anisotropy=round(gabor_anisotropy, 3),
+                    venation_parallelism=round(parallelism, 3),
+                    reason="Citra teridentifikasi sebagai daun olahan / terbakar arang (bukan daun tanaman hidup di pohon).",
+                    guidance="Arahkan kamera ke helai daun pohon pisang hidup di kebun."
+                )
 
         # -----------------------------------------------------------------
         # JALUR 3: DAUN BERLEKUK / MENJARI DIKOTIL (PEPAYA, SINGKONG, JARAK, TANAMAN HIAS)
@@ -372,9 +410,20 @@ class SpeciesValidatorService:
 
         # -----------------------------------------------------------------
         # JALUR 4: DAUN TANAMAN SPESIES LAIN (NON-BANANA LEAF / SERAT BUKAN MONOKOTIL SEJAJAR)
-        # Menolak tanaman hias pot / dikotil yang tidak memiliki pertulangan serat monokotil sejajar
+        # Validasi serat menyirip sejajar monokotil (parallel-pinnate venation).
+        # Meloloskan daun pisang jika:
+        # A. Anisotropi Gabor kuat (>= 0.80) dan paralelisme konsisten (>= 0.16)
+        # B. ATAU terdeteksi patogen spesifik daun pisang (Cordana, Pestalotiopsis, Yellow Sigatoka)
+        #    dengan confidence >= 35% pada lamina daun valid (veg >= 0.20 & par >= 0.16 & bukan menjari).
         # -----------------------------------------------------------------
-        if gabor_anisotropy < self.min_gabor_anisotropy or parallelism < self.min_parallelism:
+        is_banana = False
+        if gabor_anisotropy >= self.min_gabor_anisotropy and parallelism >= self.min_parallelism:
+            is_banana = True
+        elif specific_disease_detected and max_disease_conf >= 35.0 and veg_ratio >= 0.20 and parallelism >= self.min_parallelism and not is_lobed:
+            # Konfirmasi patologi biologis: Lesi spesifik daun pisang mengonfirmasi Genus Musa
+            is_banana = True
+
+        if not is_banana:
             return SpeciesValidationResult(
                 is_banana_leaf=False,
                 error_code=ErrorCode.NON_BANANA_LEAF.value,

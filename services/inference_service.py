@@ -36,35 +36,48 @@ def preprocess_lab_clahe(
 ) -> Tuple[np.ndarray, str, str]:
     """
     TASK 1 & TASK 8: Standarisasi Pipeline Pra-Pemrosesan CIE-LAB CLAHE.
-    1. Resize citra input ke ukuran 640x640 piksel menggunakan cv2.INTER_LINEAR.
-    2. Simpan Base64 raw_resized_base64.
-    3. Jika use_clahe is True:
+    1. Letterbox resize mempertahankan aspek rasio asli (padding ke 640x640 dengan warna netral 114).
+       Hal ini krusial agar geometri bercak lesi lonjong/oval (Cordana & Pestalotiopsis) tidak terdistorsi pipih
+       menyerupai garis bercak Black Sigatoka.
+    2. Jika use_clahe is True:
        - Konversi BGR -> CIE-LAB.
        - Terapkan cv2.createCLAHE HANYA pada kanal Luminans (L) agar informasi
          kromatis warna kuning (b) dan merah-hijau (a) tidak bergeser (anti-color shift).
        - Gabungkan kembali (L_clahe, A, B) lalu konversi kembali ke BGR.
-    4. Simpan Base64 preprocessed_clahe_base64.
+    3. Mengembalikan canvas 640x640 preprocessed_bgr, base64 raw_resized (tanpa CLAHE), dan base64 preprocessed_clahe.
     """
     if img_bgr is None or img_bgr.size == 0:
         return None, "", ""
 
-    # 1. Resize seragam ke kanvas standar YOLO (640x640)
-    img_resized = cv2.resize(img_bgr, target_size, interpolation=cv2.INTER_LINEAR)
-    raw_resized_b64 = image_to_base64(img_resized)
+    h, w = img_bgr.shape[:2]
+    tw, th = target_size
+    scale = min(tw / w, th / h)
+    nw, nh = int(round(w * scale)), int(round(h * scale))
+    resized = cv2.resize(img_bgr, (nw, nh), interpolation=cv2.INTER_LINEAR)
 
-    # 2. Aplikasi CLAHE pada kanal L
     if use_clahe:
-        lab = cv2.cvtColor(img_resized, cv2.COLOR_BGR2LAB)
+        lab = cv2.cvtColor(resized, cv2.COLOR_BGR2LAB)
         l_ch, a_ch, b_ch = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
         l_clahe = clahe.apply(l_ch)
         lab_enhanced = cv2.merge((l_clahe, a_ch, b_ch))
-        preprocessed_bgr = cv2.cvtColor(lab_enhanced, cv2.COLOR_LAB2BGR)
+        enhanced = cv2.cvtColor(lab_enhanced, cv2.COLOR_LAB2BGR)
     else:
-        preprocessed_bgr = img_resized.copy()
+        enhanced = resized.copy()
 
-    preprocessed_clahe_b64 = image_to_base64(preprocessed_bgr)
-    return preprocessed_bgr, raw_resized_b64, preprocessed_clahe_b64
+    canvas_preprocessed = np.full((th, tw, 3), 114, dtype=np.uint8)
+    canvas_raw = np.full((th, tw, 3), 114, dtype=np.uint8)
+
+    top = (th - nh) // 2
+    left = (tw - nw) // 2
+
+    canvas_preprocessed[top:top + nh, left:left + nw] = enhanced
+    canvas_raw[top:top + nh, left:left + nw] = resized
+
+    raw_resized_b64 = image_to_base64(canvas_raw)
+    preprocessed_clahe_b64 = image_to_base64(canvas_preprocessed)
+
+    return canvas_preprocessed, raw_resized_b64, preprocessed_clahe_b64
 
 
 def draw_styled_detections(
@@ -169,6 +182,28 @@ class InferenceService:
         self.model = YOLO(target_path)
         self.class_names = self.model.names
         print(f"[InferenceService] Model berhasil diinisialisasi. Daftar Kelas: {self.class_names}")
+
+    @staticmethod
+    def compute_disease_scores(diseases_only: List[Dict[str, Any]]) -> Dict[str, float]:
+        """
+        Perhitungan skor patologi terkalibrasi ilmiah:
+        Memadukan kuadrat keyakinan puncak (C_max^2) dengan suku pendukung multi-lesi terverifikasi (0.20 * sum(conf^2)).
+        Formula ini menahan dominasi kotak besar Black Sigatoka difus agar tidak mengalahkan
+        lesi fokal spesifik berkeyakinan tinggi seperti Pestalotiopsis dan Cordana.
+        """
+        class_max_conf: Dict[str, float] = {}
+        class_conf_sum: Dict[str, float] = {}
+        for d in diseases_only:
+            c = d['class_name']
+            conf_val = float(d['confidence']) / 100.0
+            if c not in class_max_conf or conf_val > class_max_conf[c]:
+                class_max_conf[c] = conf_val
+            class_conf_sum[c] = class_conf_sum.get(c, 0.0) + (conf_val ** 2)
+
+        return {
+            c: (class_max_conf[c] ** 2) + 0.20 * class_conf_sum[c]
+            for c in class_max_conf
+        }
 
     def predict(
         self,
@@ -298,8 +333,7 @@ class InferenceService:
             })
 
         # Supresi Penahanan Lesi Antar-Kelas (Intra-Lesion Containment Suppression):
-        # Jika kotak kecil (misal Black Sigatoka semu) berada di dalam (>60% luas) lesi besar
-        # dari kelas lain (seperti Cordana atau Yellow Sigatoka), supresi kotak kecil sebagai artefak nekrosis internal.
+        # Mencegah artefak internal semu tanpa menghapus lesi spesifik (Pestalotiopsis & Cordana).
         suppressed_indices = set()
         for i, c_large in enumerate(candidates):
             for j, c_small in enumerate(candidates):
@@ -316,7 +350,10 @@ class InferenceService:
                 inter_area = inter_w * inter_h
                 
                 if inter_area >= 0.60 * c_small['box_area']:
-                    if c_large['cls_name'] != c_small['cls_name'] and c_large['conf'] >= (c_small['conf'] - 0.12):
+                    # Aturan Patologi: Kotak besar Black Sigatoka DILARANG menekan lesi spesifik Pestalotiopsis / Cordana
+                    if c_large['cls_name'] == 'Black Sigatoka' and c_small['cls_name'] in ['Pestalotiopsis', 'Cordana']:
+                        continue
+                    if c_large['cls_name'] != c_small['cls_name'] and c_large['conf'] >= (c_small['conf'] + 0.10):
                         suppressed_indices.add(c_small['idx'])
 
         valid_indices: List[int] = []
@@ -401,16 +438,8 @@ class InferenceService:
         else:
             diseases_only = [d for d in detections if d['class_name'] != 'Fresh']
             if diseases_only:
-                # Perhitungan skor patologi terkalibrasi ilmiah:
-                # Memadukan keyakinan kuadrat (confidence^2) dengan skala luas lesi (sqrt(area_pct)).
-                # Mencegah lesi bintik noise Black Sigatoka kecil mengalahkan lesi besar Cordana/Yellow Sigatoka.
-                class_scores: Dict[str, float] = {}
-                for d in diseases_only:
-                    c = d['class_name']
-                    conf_weight = (d['confidence'] / 100.0) ** 2
-                    area_weight = float(np.sqrt(min(15.0, max(0.5, d.get('box_area_ratio_pct', 1.0)))))
-                    class_scores[c] = class_scores.get(c, 0.0) + (conf_weight * area_weight)
-
+                # Perhitungan skor patologi terkalibrasi ilmiah via compute_disease_scores
+                class_scores = self.compute_disease_scores(diseases_only)
                 primary_class = max(class_scores, key=class_scores.get)
                 primary_count = sum(1 for d in diseases_only if d['class_name'] == primary_class)
                 p_gran = CLASS_GRANULARITY.get(primary_class, {})

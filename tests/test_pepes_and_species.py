@@ -19,14 +19,10 @@ def test_dicot_leaf_rejection():
         min_parallelism=config.MIN_VENATION_PARALLELISM
     )
 
-    # Uji citra daun tanaman non-pisang (daun dikotil menjari / berlekuk)
-    path = os.path.join(config.BASE_DIR, 'test', 'images (4).jpg')
-    if os.path.exists(path):
-        img = cv2.imread(path)
-    else:
-        img = np.full((400, 400, 3), 220, dtype=np.uint8)
-        pts = np.array([[200, 40], [230, 150], [360, 150], [260, 230], [300, 360], [200, 270], [100, 360], [140, 230], [40, 150], [170, 150]], np.int32)
-        cv2.fillPoly(img, [pts], (35, 165, 45))
+    # Uji citra daun tanaman non-pisang (daun dikotil menjari / berlekuk sintetis)
+    img = np.full((400, 400, 3), 220, dtype=np.uint8)
+    pts = np.array([[200, 40], [230, 150], [360, 150], [260, 230], [300, 360], [200, 270], [100, 360], [140, 230], [40, 150], [170, 150]], np.int32)
+    cv2.fillPoly(img, [pts], (35, 165, 45))
 
     res = validator.validate(img)
     print(f"[TEST NON-BANANA] Category: {res.detected_category} | Anisotropy: {res.gabor_anisotropy} | is_banana: {res.is_banana_leaf}")
@@ -84,10 +80,30 @@ def test_palmate_ornamental_plant_rejection():
         assert res.error_code == ErrorCode.NON_BANANA_LEAF.value
 
 
+def test_pestalotiopsis_and_cordana_acceptance():
+    """Menguji bahwa daun pisang berpenyakit Pestalotiopsis dan Cordana diterima sebagai daun pisang valid."""
+    validator = SpeciesValidatorService(
+        min_vegetation_ratio=config.MIN_VEGETATION_RATIO,
+        min_living_chlorophyll=config.MIN_LIVING_CHLOROPHYLL_RATIO,
+        max_charred_soot=config.MAX_CHARRED_SOOT_RATIO,
+        min_gabor_anisotropy=config.MIN_GABOR_ANISOTROPY,
+        min_parallelism=config.MIN_VENATION_PARALLELISM
+    )
+
+    for sample_name in ['sample_pestalotiopsis.jpg', 'sample_cordana.jpg']:
+        path = os.path.join(config.SAMPLES_DIR, sample_name)
+        if os.path.exists(path):
+            img = cv2.imread(path)
+            res = validator.validate(img)
+            print(f"[TEST DISEASE ACCEPTANCE] {sample_name} -> Category: {res.detected_category} | Aniso: {res.gabor_anisotropy} | is_banana: {res.is_banana_leaf}")
+            assert res.is_banana_leaf, f"Sampel {sample_name} harus diterima sebagai daun pisang valid!"
+
+
 if __name__ == '__main__':
     print("=== MENGUJI PENOLAKAN DAUN NON-PISANG & DAUN PEPES ===")
     test_dicot_leaf_rejection()
     test_palmate_ornamental_plant_rejection()
     test_cooked_pepes_leaf_rejection()
+    test_pestalotiopsis_and_cordana_acceptance()
     print("=== SELURUH PENGUJIAN DAUN NON-PISANG & PEPES BERHASIL (PASS) ===")
 
