@@ -368,25 +368,14 @@ if __name__ == '__main__':
     if use_ngrok:
         _, ngrok_url = start_ngrok_tunnel(port=5000)
 
-    import socket
-    local_ip = "127.0.0.1"
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-    except Exception:
-        pass
-
     print("=" * 72)
-    print("  MusaVision — Deteksi Penyakit Daun Pisang (Musa spp.)")
-    print(f"  Akses Lokal Laptop : http://127.0.0.1:5000")
-    print(f"  Akses Wi-Fi HP/LAN : http://{local_ip}:5000")
+    print("  MusaVision — Deteksi Multi-Kelas Penyakit Daun Pisang (Musa spp.)")
+    print("  Akses Lokal Laptop : http://127.0.0.1:5000")
+    print("  Akses Wi-Fi HP/LAN : http://10.85.64.105:5000")
     if ngrok_url:
-        print(f"  >>> TAUTAN HTTPS HP (KEBUN PISANG) : {ngrok_url} <<<")
-        print("  * Salin tautan HTTPS di atas ke WhatsApp Anda dan buka di HP.")
-        print("  * Kamera HP aktif otomatis karena menggunakan koneksi HTTPS resmi.")
-        print("  * Saat pertama kali membuka di HP, klik tombol 'Visit Site' jika muncul.")
+        print(f"  Akses Internet HP  : {ngrok_url}")
+        print("  * Klik 'Visit Site' saat pertama membuka tautan ini di HP.")
+        print("  * Kamera WebRTC aktif otomatis karena menggunakan koneksi HTTPS.")
     else:
         print("  * Tips HP: Jalankan 'python app.py --ngrok' untuk membuat link online otomatis.")
     print("=" * 72)

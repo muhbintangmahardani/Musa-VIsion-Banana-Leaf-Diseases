@@ -1899,29 +1899,39 @@
 
     </main>
 
-    <!-- ================= MINIMALIST FOOTER ================= -->
-    <footer class="bg-white dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 py-6 sm:py-8 border-t border-zinc-200 dark:border-zinc-800/80 text-xs pb-24 md:pb-8 transition-colors duration-200">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4 text-center md:text-left">
+    <!-- ================= MODERN ACADEMIC FOOTER ================= -->
+    <footer class="bg-white dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 border-t border-zinc-200 dark:border-zinc-800/80 text-xs pb-24 md:pb-8 transition-colors duration-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+            <!-- Row 1: Brand & Page Navigation -->
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4 pb-5 border-b border-zinc-100 dark:border-zinc-800/60">
                 <!-- Brand & Academic Topic -->
-                <div class="flex items-center space-x-2">
-                    <span class="font-bold text-zinc-900 dark:text-white text-sm tracking-tight">Musa<span class="text-emerald-600 dark:text-emerald-400">Vision</span></span>
-                    <span class="text-zinc-300 dark:text-zinc-700">•</span>
-                    <span class="text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400">Deteksi Fitopatologi Daun Pisang (YOLO26n)</span>
+                <div class="flex flex-wrap items-center justify-center md:justify-start gap-2 sm:gap-2.5">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="font-bold text-zinc-900 dark:text-white text-sm tracking-tight">Musa<span class="text-emerald-600 dark:text-emerald-400">Vision</span></span>
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/50">v26n</span>
+                    </div>
+                    <span class="hidden sm:inline text-zinc-300 dark:text-zinc-700">•</span>
+                    <span class="text-xs text-zinc-500 dark:text-zinc-400">Sistem Deteksi Fitopatologi Daun Tanaman Pisang (<em>Musa spp.</em>)</span>
                 </div>
 
-                <!-- Desktop Page Navigation Links (Hidden on Mobile to avoid clashing with bottom bar) -->
+                <!-- Desktop Page Navigation Links -->
                 <div class="hidden md:flex items-center space-x-5 text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-                    <button type="button" onclick="navigateToPage('beranda')" class="hover:text-zinc-900 dark:hover:text-white transition">Beranda</button>
-                    <button type="button" onclick="navigateToPage('deteksi')" class="hover:text-zinc-900 dark:hover:text-white transition">Deteksi Penyakit</button>
-                    <button type="button" onclick="navigateToPage('validasi')" class="hover:text-zinc-900 dark:hover:text-white transition">Validasi Kebun</button>
-                    <button type="button" onclick="navigateToPage('metrik')" class="hover:text-zinc-900 dark:hover:text-white transition">Metrik &amp; Ablasi</button>
-                    <button type="button" onclick="navigateToPage('katalog')" class="hover:text-zinc-900 dark:hover:text-white transition">Katalog Patologi</button>
+                    <button type="button" onclick="navigateToPage('beranda')" class="hover:text-emerald-600 dark:hover:text-emerald-400 transition">Beranda</button>
+                    <button type="button" onclick="navigateToPage('deteksi')" class="hover:text-emerald-600 dark:hover:text-emerald-400 transition">Deteksi Penyakit</button>
+                    <button type="button" onclick="navigateToPage('validasi')" class="hover:text-emerald-600 dark:hover:text-emerald-400 transition">Validasi Kebun</button>
+                    <button type="button" onclick="navigateToPage('metrik')" class="hover:text-emerald-600 dark:hover:text-emerald-400 transition">Metrik &amp; Ablasi</button>
+                    <button type="button" onclick="navigateToPage('katalog')" class="hover:text-emerald-600 dark:hover:text-emerald-400 transition">Katalog Patologi</button>
                 </div>
+            </div>
 
-                <!-- Tech attribution, Author & Copyright -->
-                <div class="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono">
-                    &copy; 2026 <strong class="text-zinc-800 dark:text-zinc-200">Muh Bintang Mahardani &ndash; 17225123</strong> &bull; MusaVision YOLO26n
+            <!-- Row 2: Author, NIM, Copyright & Architecture Badge -->
+            <div class="pt-4 flex flex-col md:flex-row items-center justify-between gap-2.5 text-center md:text-left text-xs">
+                <div class="text-zinc-600 dark:text-zinc-400">
+                    &copy; 2026 <strong class="text-zinc-900 dark:text-zinc-100 font-semibold">Muh Bintang Mahardani &ndash; 17225123</strong>. Seluruh Hak Cipta Dilindungi.
+                </div>
+                <div class="flex items-center space-x-2 text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Arsitektur YOLO26n + CIE-LAB CLAHE</span>
                 </div>
             </div>
         </div>
