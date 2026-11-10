@@ -185,9 +185,33 @@ class DiagnosticPipeline:
             return build_ai_rejection_response()
 
         # -------------------------------------------------------------
-        # STAGE 2: Validasi Eksklusif Genus Musa & Filter Daun Olahan/Pepes
+        # STAGE 2: Eksekusi Inferensi YOLO26n Core Terlebih Dahulu
         # -------------------------------------------------------------
-        species_result: SpeciesValidationResult = self.species_validator.validate(img_bgr)
+        inference_output = self.inference_service.predict(
+            img_bgr=img_bgr,
+            conf_thresh=conf_thresh,
+            iou_thresh=iou_thresh,
+            use_clahe=use_clahe
+        )
+        total_detections = inference_output.get('total_detections', 0)
+        detections = inference_output.get('detections', [])
+        max_yolo_conf = max([d.get('confidence', 0.0) / 100.0 for d in detections], default=0.0)
+        has_yolo_detections = (total_detections > 0 and max_yolo_conf >= 0.25)
+
+        disease_detections = [d for d in detections if d.get('class_name') != 'Fresh']
+        has_disease_detections = (len(disease_detections) > 0 and max([d.get('confidence', 0.0) / 100.0 for d in disease_detections], default=0.0) >= 0.25)
+        max_disease_conf = max([d.get('confidence', 0.0) / 100.0 for d in disease_detections], default=0.0)
+
+        # -------------------------------------------------------------
+        # STAGE 3: Validasi Taksonomi Spesies Genus Musa dengan Konteks Deteksi YOLO
+        # -------------------------------------------------------------
+        species_result: SpeciesValidationResult = self.species_validator.validate(
+            img_bgr,
+            yolo_has_detections=has_yolo_detections,
+            max_yolo_conf=max_yolo_conf,
+            yolo_disease_detected=has_disease_detections,
+            max_disease_conf=max_disease_conf
+        )
 
         if not is_preset_sample and not species_result.is_banana_leaf:
             elapsed_ms = round((time.perf_counter() - start_perf) * 1000, 2)
@@ -256,22 +280,6 @@ class DiagnosticPipeline:
                     ]
                 }
 
-            if err_code == ErrorCode.NON_PLANT_OBJECT.value:
-                details = [
-                    "DETAIL BIOMASSA VEGETASI DAUN:",
-                    f"- Rasio Biomassa Daun: {species_result.vegetation_ratio}% (Ambang Minimal 15.0%)",
-                    "- Karakteristik Foliar: Lamina daun tidak terdeteksi pada citra",
-                    "STATUS: Objek Non-Tumbuhan. Arahkan Kamera ke Daun Pisang"
-                ]
-            else:
-                details = [
-                    "DETAIL MORFOLOGI STRUKTUR SERAT DAUN:",
-                    f"- Anisotropi Gabor Serat : {species_result.gabor_anisotropy:.2f} (Minimal Musa: 0.55)",
-                    f"- Koherensi Venasi Sejajar : {species_result.venation_parallelism:.2f} (Minimal Musa: 0.18)",
-                    "- Pola Pertulangan Daun   : Menyirip Jala / Menjari (Spesies Dikotil)",
-                    "STATUS: Bukan Genus Musa. Model Khusus Tanaman Pisang"
-                ]
-
             annotated_bgr = preprocessed_bgr.copy()
             annotated_b64 = image_to_base64(annotated_bgr)
 
@@ -316,22 +324,15 @@ class DiagnosticPipeline:
             }
 
         # -------------------------------------------------------------
-        # STAGE 2B: Verifikasi Forensik Daun Pisang Sintetis (AI Art)
-        # Jika lolos morfologi daun pisang tetapi terbukti buatan prompt AI tanpa metadata
+        # STAGE 4: Verifikasi Forensik Daun Pisang Sintetis (AI Art)
+        # Jika terbukti buatan prompt AI tanpa metadata dan tanpa deteksi riil
         # -------------------------------------------------------------
-        if not is_preset_sample and ai_result.is_ai_generated:
+        if not is_preset_sample and ai_result.is_ai_generated and not has_yolo_detections:
             return build_ai_rejection_response()
 
         # -------------------------------------------------------------
-        # STAGE 3: Inferensi YOLO & Diagnostik Fitopatologi (Daun Pisang Valid)
+        # STAGE 5: Pengemasan Hasil Inferensi Diagnostik Final (Daun Pisang Valid)
         # -------------------------------------------------------------
-        inference_output = self.inference_service.predict(
-            img_bgr=img_bgr,
-            conf_thresh=conf_thresh,
-            iou_thresh=iou_thresh,
-            use_clahe=use_clahe
-        )
-
         inference_output['is_valid_banana_leaf'] = True
         inference_output['is_ai_generated'] = False
         inference_output['validation_status'] = {

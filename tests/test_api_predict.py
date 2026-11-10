@@ -40,7 +40,12 @@ def test_api_predict_flow():
 
     print("\n=== TEST 3: Daun Spesies Lain (Bukan Genus Musa) ===")
     dicot_path = os.path.join(config.BASE_DIR, 'test', 'images (4).jpg')
-    img_dicot = cv2.imread(dicot_path)
+    if os.path.exists(dicot_path):
+        img_dicot = cv2.imread(dicot_path)
+    else:
+        img_dicot = np.full((400, 400, 3), 220, dtype=np.uint8)
+        pts = np.array([[200, 40], [230, 150], [360, 150], [260, 230], [300, 360], [200, 270], [100, 360], [140, 230], [40, 150], [170, 150]], np.int32)
+        cv2.fillPoly(img_dicot, [pts], (35, 165, 45))
     _, buffer_dicot = cv2.imencode('.jpg', img_dicot)
     dicot_io = io.BytesIO(buffer_dicot.tobytes())
 

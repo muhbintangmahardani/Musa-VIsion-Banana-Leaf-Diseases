@@ -35,11 +35,11 @@ class AppConfig:
     AI_DETECTION_THRESHOLD: float = 0.55
     
     # Ambang batas validasi genus Musa (Daun Pisang Hidup di Pohon)
-    MIN_VEGETATION_RATIO: float = 0.15
-    MIN_LIVING_CHLOROPHYLL_RATIO: float = 0.15   # Minimal klorofil aktif pada daun hidup
-    MAX_CHARRED_SOOT_RATIO: float = 0.040        # Maksimal batas hangus/arang (pepes/bakar)
-    MIN_GABOR_ANISOTROPY: float = 0.85           # Minimal keteraturan serat sejajar monokotil genus Musa
-    MIN_VENATION_PARALLELISM: float = 0.18       # Konsentrasi puncak sudut pertulangan daun sejajar
+    MIN_VEGETATION_RATIO: float = 0.15           # Minimal biomassa foliar (daun hijau/kuning/nekrotik)
+    MIN_LIVING_CHLOROPHYLL_RATIO: float = 0.05   # Minimal klorofil aktif pada daun hidup
+    MAX_CHARRED_SOOT_RATIO: float = 0.12         # Maksimal batas hangus/arang (pepes/bakar)
+    MIN_GABOR_ANISOTROPY: float = 0.80           # Minimal keteraturan serat sejajar monokotil genus Musa
+    MIN_VENATION_PARALLELISM: float = 0.16       # Konsentrasi puncak sudut pertulangan daun sejajar
 
 
 config = AppConfig()

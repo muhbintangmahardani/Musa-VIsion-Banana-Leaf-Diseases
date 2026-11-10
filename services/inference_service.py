@@ -205,37 +205,50 @@ class InferenceService:
         g_full = preprocessed_bgr[:, :, 1].astype(np.float32)
         r_full = preprocessed_bgr[:, :, 2].astype(np.float32)
 
-        # 1. Klorofil Daun Hidup (Hijau Asli):
-        # H: 25-95, S >= 25, V >= 25, G > B + 12, dan G >= R - 15
+        # Jaringan lamina daun pisang mencakup:
+        # 1. Klorofil daun hidup (hijau normal):
         mask_green = (
-            (hsv_full[:, :, 0] >= 25) & (hsv_full[:, :, 0] <= 95)
-            & (hsv_full[:, :, 1] >= 25) & (hsv_full[:, :, 2] >= 25)
-            & (g_full > b_full + 12) & (g_full >= r_full - 15)
+            (hsv_full[:, :, 0] >= 22) & (hsv_full[:, :, 0] <= 98)
+            & (hsv_full[:, :, 1] >= 15) & (hsv_full[:, :, 2] >= 20)
+            & (g_full > b_full + 5)
         )
 
-        # 2. Lingkaran Halo Klorosis Jamur (Kuning Daun Terinfeksi):
-        # H: 18-32, S >= 35, V >= 35, G > B + 20, dan R <= G + 25 (menolak coklat kayu kemerahan)
+        # 2. Klorosis kuning / halo patogen (Yellow Sigatoka & tepi Cordana):
         mask_halo = (
-            (hsv_full[:, :, 0] >= 18) & (hsv_full[:, :, 0] <= 32)
-            & (hsv_full[:, :, 1] >= 35) & (hsv_full[:, :, 2] >= 35)
-            & (g_full > b_full + 20) & (r_full <= g_full + 25)
+            (hsv_full[:, :, 0] >= 12) & (hsv_full[:, :, 0] <= 42)
+            & (hsv_full[:, :, 1] >= 18) & (hsv_full[:, :, 2] >= 25)
+            & (g_full > b_full + 8)
         )
 
-        mask_foliar_raw = (mask_green | mask_halo).astype(np.uint8) * 255
+        # 3. Jaringan nekrotik / bercak lesi patogen (Black Sigatoka, Cordana, Pestalotiopsis):
+        mask_necrotic = (
+            (hsv_full[:, :, 0] >= 5) & (hsv_full[:, :, 0] <= 32)
+            & (hsv_full[:, :, 1] >= 12) & (hsv_full[:, :, 2] >= 15) & (hsv_full[:, :, 2] <= 215)
+            & (r_full >= b_full + 3)
+        )
 
-        # Bersihkan noise isolated speckle 1-2px pada latar kayu/lantai dengan morphological OPEN
+        # 4. Daun tua / zaitun / lamina mengering alami:
+        mask_olive = (
+            (hsv_full[:, :, 0] >= 18) & (hsv_full[:, :, 0] <= 65)
+            & (hsv_full[:, :, 1] >= 10) & (hsv_full[:, :, 2] >= 15)
+            & (g_full >= b_full - 5)
+        )
+
+        mask_foliar_raw = (mask_green | mask_halo | mask_necrotic | mask_olive).astype(np.uint8) * 255
+
+        # Bersihkan noise isolated speckle pada latar non-daun
         open_k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         mask_opened = cv2.morphologyEx(mask_foliar_raw, cv2.MORPH_OPEN, open_k)
 
-        # Pertahankan hanya komponen foliar yang memiliki luas signifikan (area >= 300px)
+        # Pertahankan hanya komponen foliar yang memiliki luas signifikan (area >= 150px)
         num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask_opened)
         clean_foliar_mask = np.zeros_like(mask_opened)
         for i in range(1, num_labels):
-            if stats[i, cv2.CC_STAT_AREA] >= 300:
+            if stats[i, cv2.CC_STAT_AREA] >= 150:
                 clean_foliar_mask[labels == i] = 255
 
-        # Dilatasi untuk menaungi lesi nekrotik yang tertanam di dalam lamina atau di tepian helai daun
-        dilate_k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
+        # Dilatasi untuk menaungi lesi nekrotik dan tepi helai daun
+        dilate_k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (35, 35))
         canopy_mask = cv2.dilate(clean_foliar_mask, dilate_k) > 0
         total_leaf_pixels = np.count_nonzero(clean_foliar_mask)
 
@@ -271,45 +284,14 @@ class InferenceService:
             box_h = max(1, y2 - y1)
             box_area = box_w * box_h
 
-            # 1. Verifikasi Tumpang Tindih Kanopi Daun:
-            # Jika pada citra terdapat daun yang terdeteksi (total_leaf_pixels > 500),
-            # maka setiap lesi patogen wajib berada di dalam atau menempel pada kanopi daun.
-            # Kotak yang berada di luar kanopi daun (< 35% overlap) merupakan halusinasi latar belakang (pot/lantai/meja).
+            # Verifikasi keterkaitan bounding box dengan kanopi jaringan daun:
+            # Menolak kotak halusinasi yang berada murni di luar area lamina daun (misal dinding/lantai/meja kosong)
             box_canopy = canopy_mask[max(0, y1):min(imgsz, y2), max(0, x1):min(imgsz, x2)]
             canopy_overlap_ratio = np.count_nonzero(box_canopy) / float(box_area)
-            if total_leaf_pixels > 500 and canopy_overlap_ratio < 0.35:
+            
+            # Jika terdeteksi jaringan daun di citra, kotak harus memiliki kontak dengan lamina daun minimal 10%
+            if total_leaf_pixels > 500 and canopy_overlap_ratio < 0.10 and conf < 0.50:
                 continue
-
-            # 2. Verifikasi Komposisi Warna Internal Bounding Box
-            box_crop = preprocessed_bgr[max(0, y1):min(imgsz, y2), max(0, x1):min(imgsz, x2)]
-            if box_crop.size > 0:
-                h_c = hsv_full[max(0, y1):min(imgsz, y2), max(0, x1):min(imgsz, x2)]
-                b_c = b_full[max(0, y1):min(imgsz, y2), max(0, x1):min(imgsz, x2)]
-                g_c = g_full[max(0, y1):min(imgsz, y2), max(0, x1):min(imgsz, x2)]
-                r_c = r_full[max(0, y1):min(imgsz, y2), max(0, x1):min(imgsz, x2)]
-
-                # Kelas 'Fresh' wajib memiliki minimal 25% piksel klorofil hijau asli
-                if cls_name == 'Fresh':
-                    green_in_box = (
-                        (h_c[:, :, 0] >= 25) & (h_c[:, :, 0] <= 95)
-                        & (h_c[:, :, 1] >= 25) & (h_c[:, :, 2] >= 25)
-                        & (g_c > b_c + 12) & (g_c >= r_c - 15)
-                    )
-                    if (np.count_nonzero(green_in_box) / float(box_area)) < 0.25:
-                        continue
-
-                # Kelas penyakit bercak/nekrotik (Black Sigatoka / Cordana / Pestalotiopsis):
-                # Menolak jika kotak didominasi warna coklat kayu/pot/tanah/dinding (R > G + 15, R > B + 20)
-                # tanpa kontak jaringan kanopi daun yang dominan (canopy_overlap < 50%)
-                pure_brown_bg = (r_c > g_c + 15) & (r_c > b_c + 20) & (h_c[:, :, 0] <= 25)
-                brown_ratio = np.count_nonzero(pure_brown_bg) / float(box_area)
-                if brown_ratio > 0.45 and canopy_overlap_ratio < 0.50:
-                    continue
-
-                # Filter lesi pada pot / lantai / latar non-daun:
-                # Lesi patogenik foliar pisang tidak dapat berdiri di atas material anorganik/kayu
-                if cls_name in ['Black Sigatoka', 'Cordana'] and canopy_overlap_ratio < 0.40:
-                    continue
 
             valid_indices.append(idx)
             class_counter[cls_name] = class_counter.get(cls_name, 0) + 1
