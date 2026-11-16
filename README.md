@@ -1,4 +1,4 @@
-# MusaVision: Deteksi Fitopatologi Penyakit Daun Tanaman Pisang (*Musa spp.*) Berbasis Visi Komputer dan Pembelajaran Mendalam (YOLO26n)
+# MusaVision: Deteksi Fitopatologi Penyakit Daun Tanaman Pisang (*Musa spp.*) Berbasis Computer Vision dan Deep Learning (YOLO26n)
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue.svg?style=flat-square&logo=python)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C.svg?style=flat-square&logo=pytorch)
